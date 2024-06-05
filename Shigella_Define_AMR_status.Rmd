@@ -1,0 +1,68 @@
+---
+title: "Define_MDR_XDR_for_Shigella_sp"
+author: "Jake A Lacey and Danielle J Ingle"
+date: "2024-05-29"
+output: html_document
+---
+#Data for AMR and SNPS can be obtained by running AbriTAMR with the --species Escherichia flag or SNPs can also be obtained from sonneityper.
+
+#XDR defined as per CDC, which defines XDR Shigella as strains that are resistant to all commonly recommended empiric and alternative antibiotics — azithromycin, ciprofloxacin, ceftriaxone, trimethoprim-sulfamethoxazole (TMP-SMX), and ampicillin.  
+
+#Azithromycin resistance is encoded by macrolide resistance genes such as mph(A) and erm(B)
+#Ciprofloxacin resistance is primarily due to mutations in the gyrA gene (QRDR region)
+#Quinilone resistance is primary in Shigella is due to mutations in the quinolone resistance-determining regions (QRDRs) of the gyrA and parC genes but there can be additional mechanism encoded on plasmids (qnrA, qnrB, qnrS) 
+#Ceftriaxone resistance is to the production of extended-spectrum beta-lactamases (ESBLs), such as blaCTX-M.
+#Trimethoprim-Sulfamethoxazole (TMP-SMX) resistence is due to multiple genes in combination such as sul1 and sul2, and drfA* genes
+#Ampicillin resistance is commonly due to beta-lactamase production, such as blaOXA-1like and blaTEM genes (but the CTX-Ms also do this)
+
+#MDR is resistance to atleast 3 classes but not the full complement of XDR these can carry a blaCTX or either a blaTEM-1 or a blaOXA-1. 
+#Here we also split the MDR into 2 categories, ESBL carrying and non-ESBL carrying to assist with further discrimination. 
+
+###Special Notes
+#trimethoprim-sulfamethoxazole (TMP-SMX) - is treated as one antibiotic so for resistance needs both genes to be present
+#Ciprofloxacin resitance is due to either 3 mutaitons in QRDR or 1 or 2 and the presence of a plasmid gene. 
+#AMR_Beta-lactamase (unknown), AMR_Beta-lactamase (narrow), AMR_Streptomycin, AMR_Tetracycline, AMR_Efflux,	AMR_Other antimicrobial are all not importnat in shigella so will be ignored despite being valid gene ouputs from abritamr
+#need to make a column in input with header "AMR_num QRDR" - this will be a value of 0-3 with the number of QRDR mutations observed. (this is a standard ouput if use sonneityper but if determining from abritmar snps then this will need to be done)
+
+```{r, Shigella_AMR_status_assign}
+
+# Load the necessary library
+library(data.table)
+
+# Read the CSV file
+amr_data <- fread("/path_to_file/AMR_profiles.csv")
+
+# Define a helper function to calculate the combined score
+calculate_combined_hits <- function(row) {
+  hits <- 0
+  if (row[["AMR_Trimethoprim"]] != "-" & row[["AMR_Sulfonamide"]] != "-") {
+    hits <- hits + 1
+  }
+  if (row[["AMR_num QRDR"]] == 3 || (row[["AMR_num QRDR"]] %in% c(1, 2) & row[["AMR_Quinolone"]] != "-")) {
+    hits <- hits + 1
+  }
+  hits <- hits + sum(row[c("AMR_ESBL", "AMR_Macrolide", "AMR_Beta-lactamase (not ESBL or Carb)")] != "-")
+  return(hits)
+}
+
+# Apply the conditions and add the AMR_status column
+amr_data[, AMR_status := apply(amr_data, 1, function(row) {
+  if (row["AMR_Trimethoprim"] != "-" & row["AMR_Sulfonamide"] != "-" & row["AMR_ESBL"] != "-" & 
+      row["AMR_Macrolide"] != "-" & 
+      (row["AMR_num QRDR"] == 3 || (row["AMR_num QRDR"] %in% c(1, 2) & row["AMR_Quinolone"] != "-"))) {
+    "XDR"
+  } else if (row["AMR_ESBL"] != "-" & calculate_combined_hits(row) >= 3) {
+    "MD`R"
+  } else if (calculate_combined_hits(row) >= 3) {
+    "MDR_no_esbl"
+  } else {
+    "-"
+  }
+})]
+
+
+# Write the updated data frame to a new CSV file
+fwrite(amr_data, "/path_to_file/AMR_profile_with_status.csv")
+
+
+```
