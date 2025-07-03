@@ -1,0 +1,156 @@
+---
+title: "Defining_clusters_from_ska_based_networks"
+author: "Jake_Lacey"
+date: "2024-08-05"
+output: html_document
+---
+
+```{r, Using ska networks to visualise clusters}
+
+# Load necessary libraries
+library(ggraph)
+library(tidygraph)
+library(igraph)
+library(tidyverse)
+library(ggnetwork)
+library(intergraph)
+library(naniar)
+library(RColorBrewer)
+library(graphlayouts)
+library(plotly)
+library(lubridate)
+
+# Read the .tsv file for distances
+SKA_distances_all_variables <- read_tsv("/Path_to_ska_distance_fiele.distances.tsv")
+
+# Read the metadata file
+metadata <- read_csv("Path_to_metadata_aligning_with_ska_samples_matching ID.csv")
+
+# Create the nodes data frame
+nodes <- metadata %>%
+  mutate(id = ISOLATE_itemcode)
+
+# Create the links data frame with specified cutoffs
+links <- SKA_distances_all_variables %>%
+  filter(`Jaccard Index` >= 0.90, SNPs <= 20) %>%
+  select(`Sample 1`, `Sample 2`) %>%
+  rename(from = `Sample 1`, to = `Sample 2`)
+
+# Filter links to include only those present in nodes dataframe
+links <- links %>%
+  filter(from %in% nodes$id & to %in% nodes$id)
+
+# Define the color scheme for Sample type
+sample_type_colors <- c("Human" = "darkred", "Water" = "paleturquoise")
+
+# Graph using ggnetwork
+net <- graph_from_data_frame(d = links, vertices = nodes, directed = FALSE)
+layout <- layout_with_fr(net)
+
+network_net <- ggplot(ggnetwork(net, layout = layout), aes(x, y, xend = xend, yend = yend)) +
+  geom_edges(color = "grey") +
+  geom_nodes(aes(color = `Sample type`), size = 5) +
+  scale_color_manual(values = sample_type_colors) +
+  theme_void() +
+  ggtitle("Legionella Isolate Network (SNPs < 5)")
+
+# Print the plot
+print(network_net)
+
+# Make interactive plot
+plotly_network_net <- plotly::ggplotly(network_net)
+plotly_network_net
+
+# Graph using ggraph (better layout options)
+tidy_net <- tbl_graph(nodes = nodes, edges = links, directed = FALSE)
+
+network_gg <- ggraph(tidy_net, layout = "auto") +
+  geom_edge_link(color = "grey") +
+  geom_node_point(aes(color = `Sample type`), size = 3) +
+  geom_node_text(aes(label = id), repel = TRUE, size = 3) +
+  scale_color_manual(values = sample_type_colors) +
+  theme_void() +
+  ggtitle("Legionella clusters using JI > 99% and SKA SNPs < 5")
+
+# Print the plot
+print(network_gg)
+
+# Make interactive plot
+plotly_network_gg <- plotly::ggplotly(network_gg)
+plotly_network_gg
+```
+
+```{r, Using ska networks to produce cluster list}
+
+# Load necessary libraries
+library(ggraph)
+library(tidygraph)
+library(igraph)
+library(tidyverse)
+library(ggnetwork)
+library(intergraph)
+library(naniar)
+library(RColorBrewer)
+library(graphlayouts)
+library(plotly)
+library(lubridate)
+
+# Read the .tsv file for distances
+SKA_distances_all_variables <- read_tsv("/Path_to_ska_distance_fiele.distances.tsv")
+
+# Read the metadata file
+metadata <- read_csv("Path_to_metadata_aligning_with_ska_samples_matching ID.csv")
+
+# Create the nodes data frame
+nodes <- metadata %>%
+  mutate(id = ISOLATE_itemcode)
+
+# Create the links data frame with specified cutoffs
+links <- SKA_distances_all_variables %>%
+  filter(`Jaccard Index` >= 0.90, SNPs <= 20) %>%
+  select(`Sample 1`, `Sample 2`) %>%
+  rename(from = `Sample 1`, to = `Sample 2`)
+
+# Filter links to include only those present in nodes dataframe
+links <- links %>%
+  filter(from %in% nodes$id & to %in% nodes$id)
+
+# Create the graph
+net <- graph_from_data_frame(d = links, vertices = nodes, directed = FALSE)
+
+# Perform clustering
+clusters <- cluster_fast_greedy(net)
+nodes$cluster <- clusters$membership
+
+#Assign each group of isolates as a cluster and print a csv file that says which ID belongs to which cluster at that threshold.
+cluster_data <- nodes %>%
+  select(id, cluster)
+write_csv(cluster_data, "/Path_to_store_results/cluster_assignments.csv")
+
+#Print second csv with closest isolate in terms of SNPs for every Human isolate
+human_isolates <- nodes %>%
+  filter(`Sample type` == "Human")
+
+closest_isolates <- human_isolates %>%
+  rowwise() %>%
+  mutate(
+    closest_isolate = {
+      temp <- SKA_distances_all_variables %>%
+        filter((`Sample 1` == id & `Sample 2` != id) | (`Sample 2` == id & `Sample 1` != id)) %>%
+        arrange(SNPs) %>%
+        slice(1)
+      if_else(temp$`Sample 1` == id, temp$`Sample 2`, temp$`Sample 1`)
+    },
+    closest_snp = {
+      temp <- SKA_distances_all_variables %>%
+        filter((`Sample 1` == id & `Sample 2` == closest_isolate) |
+                 (`Sample 2` == id & `Sample 1` == closest_isolate))
+      temp$SNPs
+    }
+  ) %>%
+  ungroup()
+
+write_csv(closest_isolates, "/Path_to_store_results/human_isolate_closest.csv")
+
+
+```

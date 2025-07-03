@@ -1,0 +1,228 @@
+---
+title: "Global_Maps_of_Key_AMR_Gene_by_Genus_extracted_from_GDP"
+author: "Jake_Lacey"
+date: "2024-11-27"
+output: html_document
+---
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(tidygeocoder)
+
+# Load the data csv file with 2 columns, Location eg. Australia and Counts of genomes within locaiotn eg. 10
+
+#Location	Counts_NDM-1
+#Afghanistan	1
+#Albania	3
+#Algeria	1
+#Argentina	33
+##Argentina: BUENOS AIRES	7
+Argentina: CABA	8
+
+data <- read.csv("Path_to_directory/country_counts.csv")
+
+# Geocode all unique locations (including subregions)
+geocoded_data <- data %>%
+  geocode(Location, method = "osm", lat = latitude, long = longitude)
+
+```
+
+```{r}
+# Assign geographical regions
+
+#geocoded_data <- geocoded_data %>%
+#  filter(Location != "(blank)" & Location != "Grand Total")
+
+geocoded_data <- geocoded_data %>%
+  mutate(Region = case_when(
+    str_detect(Location, "China|Japan|South Korea|Taiwan|Hong Kong") ~ "East Asia",
+    str_detect(Location, "Thailand|Vietnam|Indonesia|Philippines|Malaysia|Cambodia|Viet Nam") ~ "South East Asia",
+    str_detect(Location, "India|Pakistan|Bangladesh|Sri Lanka|Nepal") ~ "South Asia",
+    str_detect(Location, "USA|Canada|Mexico") ~ "North America",
+    str_detect(Location, "Argentina|Brazil|Colombia|Chile|Peru|Ecuador|Costa Rica|Guatemala|Honduras") ~ "Central and South America",
+    str_detect(Location, "Egypt|Algeria|Morocco|Saudi Arabia|UAE|Qatar|Iran|Israel|Jordan|Kazakhstan|Tunisia") ~ "Middle East and North Africa",
+    str_detect(Location, "France|Germany|Italy|Spain|UK|Russia|Albania|Armenia|Austria|Belarus|Belgium|Berlgium|Bulgaria|Denmark|Czech Republic|Estonia|Finland|Greece|Hungary|Montenegro|Russia|Sweden|Turkey|Ukraine") ~ "Europe",
+    str_detect(Location, "rica|Nigeria|Kenya|Ghana|Benin|Botswana|Cote d'Ivoire|Ethiopia|Sudan") ~ "Africa",
+    str_detect(Location, "Australia|New Zealand|Fiji") ~ "Oceania",
+    TRUE ~ "Other"
+  ))
+
+# Plot the world map
+
+ndm_map<- ggplot() +
+  geom_polygon(data = world_map, aes(x = long, y = lat, group = group),
+               fill = "gray85", color = "white") +
+  geom_point(data = geocoded_data,
+             aes(x = longitude, y = latitude, size = Counts, color = Region),
+             alpha = 0.7) +
+  scale_size_continuous(
+    name = "Counts (NDM-1)",
+    breaks = c(1, 5, 10, 50, 100, 500, 1000),  # Custom breaks
+    labels = c("1", "5", "10", "50", "100", "500", "1000")  # Labels for the breaks
+  ) +
+  scale_color_manual(values = c(
+    "East Asia" = "#e31a1c",
+    "South East Asia" = "#fb9a99",
+    "South Asia" = "#ff7f00",
+    "North America" = "#a6cee3",
+    "Central and South America" = "#6a3d9a",
+    "Middle East and North Africa" = "#fdbf6f",
+    "Europe" = "#1f78b4",
+    "Africa" = "#33a02c",
+    "Oceania" = "#1a1a1a",
+    "Other" = "gray"
+  )) +
+  theme_minimal() +
+  labs(title = "World Map of NDM-4 Counts by Location and Region",
+       x = "Longitude", y = "Latitude",
+       color = "Region")
+
+#ggsave("Path_to_directory/blaNDM-1_Country_Counts_Map.pdf", plot = ndm_map, width = 10, height = 5, dpi = 300)
+
+```
+
+
+
+```{r, modified geocode}
+##read fixed geocoded_data
+data_geo_fix <- read.csv("/Path_to_directory/blaNDM-1_geo.csv")
+
+ndm_map<- ggplot() +
+  geom_polygon(data = world_map, aes(x = long, y = lat, group = group),
+               fill = "gray85", color = "white") +
+  geom_point(data = data_geo_fix,
+             aes(x = longitude, y = latitude, size = Counts_NDM.1, color = Region),
+             alpha = 0.7) +
+  scale_size_continuous(
+    name = "Counts (NDM-1)",
+    breaks = c(1, 5, 10, 50, 100, 500, 1000),  # Custom breaks
+    labels = c("1", "5", "10", "50", "100", "500", "1000") + # Labels for the breaks
+  scale_fill_manual(values = c(
+    "East Asia" = "#e31a1c",
+    "South East Asia" = "#fb9a99",
+    "South Asia" = "#ff7f00",
+    "North America" = "#a6cee3",
+    "Central and South America" = "#6a3d9a",
+    "Middle East and North Africa" = "#fdbf6f",
+    "Europe" = "#1f78b4",
+    "Africa" = "#33a02c",
+    "Oceania" = "#1a1a1a",
+    "Other" = "gray"
+  ))  +
+  theme_minimal() +
+  labs(title = "World Map of NDM-1 Counts by Location and Region",
+       x = "Longitude", y = "Latitude",
+       color = "Region")
+
+#ggsave("Path_to_directory/blaNDM-1_Country_Counts_Map.pdf", plot = ndm_map, width = 10, height = 5, dpi = 300)
+
+```
+
+```{r,histogram}
+
+library(ggbreak)
+
+data_genus <- read.csv("Path_to_directory/blaNDM-1_Genus_counts.csv")
+
+#data_genus will contain 2 column csv with Genus eg Escherichia and counts eg 2245
+
+#Genus	Counts
+#Acinetobacter	2268
+#Aeromonas	7
+#Citrobacter	520
+#Enterobacter	2089
+#Escherichia	1713
+#Klebsiella	10098
+
+genus_summary <- data_genus %>%
+  group_by(Genus) %>%
+  summarize(Total_Count = sum(Counts), .groups = "drop") %>%
+  arrange(desc(Total_Count))  # Sort data by Total_Count (highest to lowest)
+
+# Reorder Genus for plotting
+genus_summary <- genus_summary %>%
+  mutate(Genus = factor(Genus, levels = Genus))  # Ensure Genus is ordered by Total_Count
+
+
+# Plot a histogram of counts by genus with a broken y-axis
+histogram_genus_plot <- ggplot(genus_summary, aes(x = Genus, y = Total_Count, fill = Genus)) +
+  geom_bar(stat = "identity", color = "black") +  # Use 'identity' since data is pre-summarized
+  scale_fill_manual(values = c(
+    "Acinetobacter" = "#8dd3c7",
+    "Klebsiella" = "#fccde5",
+    "Enterobacter" = "#ffffb3",
+    "Escherichia" = "#a6cee3",
+    "Pseudomonas" = "#fb8072",
+    "Providencia" = "#fdbf6f",
+    "Citrobacter" = "#1f78b4",
+    "Morganella" = "#bc80bd",
+    "Serratia" = "#1a1a1a",
+    "Salmonella" = "#b3de69",
+    "Vibrio" = "gray",
+    "Pluralibacter" = "gray",
+    "Aeromonas" = "gray",
+    "Kluyvera" = "gray",
+    "Shewanella" = "gray",
+    "Listeria" = "gray")) + 
+  theme_minimal() +
+  labs(
+    title = "Histogram of NDM-4 Counts by Genus",
+    x = "Genus",
+    y = "Total Count",
+    fill = "Genus"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotate x-axis labels for readability
+  scale_y_continuous() #+  # Default y-axis scale 
+  #scale_y_break(c(2500, 9000), scales = "free")  # Introduce a break in the y-axis between 2500 and 9000
+
+
+# Display the plot
+print(histogram_genus_plot)
+
+# Save the histogram
+#ggsave("/Users/laceyj1/Documents/MDU_AMR/blaNDM-4_species_country_histgram.pdf", plot = histogram_genus_plot, width = 6, height = 6, dpi = 300)
+
+```
+
+
+```{r,histogram_specied}
+
+# Summarize data by region
+region_summary <- data_geo_fix %>%
+  group_by(Region) %>%
+  summarize(Total_Count = sum(Counts_NDM.1), .groups = "drop")
+
+# Plot a histogram of counts by region
+histogram_plot <- ggplot(region_summary, aes(x = Total_Count, y = Region, fill = Region)) +
+  geom_bar(stat = "identity", color = "black") +  # Use 'identity' since data is pre-summarized
+  scale_fill_manual(values = c(
+    "East Asia" = "#e31a1c",
+    "South East Asia" = "#fb9a99",
+    "South Asia" = "#ff7f00",
+    "North America" = "#a6cee3",
+    "Central and South America" = "#6a3d9a",
+    "Middle East and North Africa" = "#fdbf6f",
+    "Europe" = "#1f78b4",
+    "Africa" = "#33a02c",
+    "Oceania" = "#1a1a1a",
+    "Other" = "gray"
+  ))  +
+  theme_minimal() +
+  labs(
+    title = "Histogram of NDM-1 Counts by Region",
+    x = "Region",
+    y = "Total Count",
+    fill = "Region"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for readability
+
+# Display the plot
+print(histogram_plot)
+
+# Save the histogram
+#ggsave("/Users/laceyj1/Documents/MDU_AMR/blaNDM-1_Counts_country_histgram.pdf", plot = histogram_plot, width = 7, height = 5, dpi = 300)
+
+```
