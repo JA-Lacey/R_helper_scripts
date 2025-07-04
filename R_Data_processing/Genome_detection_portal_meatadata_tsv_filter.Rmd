@@ -1,0 +1,53 @@
+---
+title: "Genome_detection_portal_metadata_dereplication"
+author: "Jake_Lacey"
+date: "2025-06-16"
+output: html_document
+---
+
+
+```{r}
+
+# Load required packages
+library(readr)
+library(dplyr)
+library(stringr)
+
+# Step 1: Read in the TSV file
+df <- read_tsv("Path_to_directory/isolates.tsv", show_col_types = FALSE)
+
+# Step 2: Select key columns and retain extra info
+df_selected <- df %>%
+  select(`Collection date`, Location, `SNP cluster`, Assembly, everything())
+
+# Step 3: Clean and standardise
+df_selected <- df_selected %>%
+  mutate(
+    Location = str_trim(Location),
+    `Collection date` = as.character(`Collection date`),
+    `SNP cluster` = as.character(`SNP cluster`),
+    Assembly = str_trim(Assembly)
+  )
+
+# Step 4: Filter for rows with valid SNP cluster, Location, and Assembly
+df_filtered <- df_selected %>%
+  filter(
+    !is.na(`SNP cluster`) & `SNP cluster` != "",
+    !is.na(Location) & Location != "",
+    !is.na(Assembly) & Assembly != ""
+  )
+
+# Step 5: Dereplicate — one representative per SNP cluster × Location
+df_dereplicated <- df_filtered %>%
+  group_by(`SNP cluster`, Location) %>%
+  slice(1) %>%
+  ungroup()
+
+# Step 6: View or save result
+print(df_dereplicated %>% select(`Collection date`, Location, `SNP cluster`, Assembly))
+
+# Optional: write to file
+write_csv(df_dereplicated, "Path_to_directory/isolates_dereplicated_snp_locations.csv")
+
+
+```
