@@ -1,0 +1,95 @@
+```{r, betadiv over time within and between multiple locations}
+
+library(tidyverse)
+library(lubridate)
+library(vegan)
+library(ggplot2)
+
+# Read CSV file
+df <- read_csv("/path_to_directory/comaparisons.csv")
+
+# Data Cleaning
+
+df_clean <- df %>%
+  mutate(Date_coll = dmy(Date_coll),          # Convert to Date format
+         YearMonth = floor_date(Date_coll, "month"),
+         Year = year(YearMonth)) %>%          # Extract Year
+  filter(Jurisdiction %in% c("QLD", "VIC"),
+         !Year %in% c(2016, 2024))             # Exclude 2016 and 2024
+
+# Create a yearly summary and investigate it
+
+df_yearly <- df_clean %>%
+  count(Jurisdiction, Year, emm) %>%
+  pivot_wider(names_from = emm, values_from = n, values_fill = list(n = 0)) %>%
+  arrange(Jurisdiction, Year)
+print(df_yearly)
+
+
+# Create Community Matrix by Jurisdiction and Year
+
+comm_data <- df_clean %>%
+  count(Jurisdiction, Year, emm) %>%
+  pivot_wider(names_from = emm, values_from = n, values_fill = list(n = 0)) %>%
+  arrange(Jurisdiction, Year) %>%
+  mutate(TotalSamples = rowSums(across(-c(Jurisdiction, Year))))  # Note the closing parenthesis here
+
+# Create a unique identifier for each group (Jurisdiction_Year)
+comm_data <- comm_data %>% 
+  unite("Group", Jurisdiction, Year, sep = "_", remove = FALSE)
+
+# Create a community matrix (rows = Group; columns = emm types)
+comm_matrix <- comm_data %>%
+  column_to_rownames("Group") %>%
+  dplyr::select(-Jurisdiction, -Year, -TotalSamples) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  as.data.frame()
+
+# Calculate Beta-Diversity using the Bray-Curtis Dissimilarity
+
+bc_dist <- vegdist(comm_matrix, method = "bray")
+
+
+# NMDS Ordination calculations
+
+nmds <- metaMDS(comm_matrix, distance = "bray", k = 2, trymax = 100)
+
+# Create a data frame of NMDS coordinates with metadata incorporated
+nmds_df <- as.data.frame(nmds$points) %>%
+  rownames_to_column("Group") %>%
+  separate(Group, into = c("Jurisdiction", "Year"), sep = "_", convert = TRUE, remove = FALSE) %>%
+  left_join(comm_data %>% dplyr::select(Group, TotalSamples), by = "Group")
+
+
+# PERMANOVA statistics to Test Differences in Community Composition
+
+adonis_results <- adonis2(bc_dist ~ Jurisdiction * Year, data = comm_data)
+print(adonis_results)
+
+
+# Plot NMDS Ordination Point Size Reflects Total emm Count per Year
+
+beta_plot <- ggplot(nmds_df, aes(x = MDS1, y = MDS2, color = Jurisdiction, size = TotalSamples)) +
+  geom_point(alpha = 0.8) +
+  geom_text(aes(label = Year), vjust = -0.5, size = 3, check_overlap = TRUE) +
+  labs(title = "NMDS Ordination of emm Community Composition",
+       subtitle = "Beta Diversity (Bray–Curtis Dissimilarity); Point Size ~ Total emm Count per Year",
+       size = "Total emm Count") +
+  theme_minimal() +
+  theme(axis.text = element_text(size = 10),
+        plot.title = element_text(face = "bold"))
+
+print(beta_plot)
+
+# Fit environmental (emm type) vectors onto the NMDS ordination
+envfit_res <- envfit(nmds, comm_matrix, permutations = 999)
+
+# Print the results
+print(envfit_res)
+
+# Optionally, plot the NMDS with the significant vectors overlayed
+plot_nmds <- plot(nmds, display = "sites", main = "NMDS with emm Vectors")
+plot_res <- plot(envfit_res, p.max = 0.05, col = "blue")  # Only plot emm types with p < 0.05
+
+
+````

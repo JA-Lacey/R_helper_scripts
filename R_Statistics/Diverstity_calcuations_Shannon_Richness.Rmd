@@ -1,0 +1,56 @@
+```{r, quantfiying diversity within mutliple locations}
+
+library(tidyverse)
+library(lubridate)
+library(vegan)
+
+# Read CSV file
+df <- read_csv("/Path_to_directory/comaparisons.csv")
+
+# Data Cleaning
+df_clean <- df %>%
+  mutate(Date_coll = dmy(Date_coll),  # Convert to Date format
+         YearMonth = floor_date(Date_coll, "month")) %>%  # Extract month
+  filter(Jurisdiction %in% c("QLD", "VIC", "NT"))  # Keep only QLD and VIC
+
+# Aggregate counts of emm types by Jurisdiction
+df_overall <- df_clean %>%
+  count(Jurisdiction, emm) %>%
+  pivot_wider(names_from = emm, values_from = n, values_fill = list(n = 0)) %>%
+  column_to_rownames("Jurisdiction")
+
+# Calculate Shannon diversity and richness for each jurisdiction
+shannon_overall <- apply(df_overall, 1, diversity, index = "shannon")
+richness_overall <- apply(df_overall, 1, specnumber)
+
+overall_diversity <- tibble(
+  Jurisdiction = rownames(df_overall),
+  Shannon = shannon_overall,
+  Richness = richness_overall
+)
+
+print("Overall emm Diversity by Jurisdiction:")
+print(overall_diversity)
+
+# Calculate counts and prevalence of each emm type by Jurisdiction
+df_prevalence <- df_clean %>%
+  count(Jurisdiction, emm) %>%
+  group_by(Jurisdiction) %>%
+  mutate(Total = sum(n),
+         Prevalence = n / Total) %>%
+  ungroup()
+
+print("Prevalence of Each emm Type by Jurisdiction:")
+print(df_prevalence)
+
+plot_prevalence <- ggplot(df_prevalence, aes(x = reorder(emm, -Prevalence), y = Prevalence, fill = Jurisdiction)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Jurisdiction, scales = "free_x") +
+  labs(title = "Prevalence of emm Types by Jurisdiction",
+       x = "emm Type", y = "Prevalence") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(plot_prevalence)
+
+```

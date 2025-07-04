@@ -1,0 +1,44 @@
+```{r, histograms}
+library(tidyverse)
+library(lubridate)
+
+# Create a Year variable
+df_clean <- df_clean %>%
+  mutate(Year = year(YearMonth))
+
+# Identify the top 20 emm types overall
+top_emm20 <- df_clean %>%
+  count(emm, sort = TRUE) %>%
+  top_n(20, n) %>%
+  pull(emm)
+
+# Create a new variable 'emm_grouped': keep emm if in top 20, otherwise "Other"
+df_clean <- df_clean %>%
+  mutate(emm_grouped = ifelse(emm %in% top_emm20, emm, "Other"))
+
+# Determine the order of the top 20 emm types (most common first)
+top20_order <- df_clean %>%
+  filter(emm_grouped != "Other") %>%
+  count(emm_grouped, sort = TRUE) %>%
+  arrange(desc(n)) %>%
+  pull(emm_grouped)
+
+# Set factor levels: top 20 in order, then "Other" at the end
+levels_order <- c(top20_order, "Other")
+df_clean <- df_clean %>%
+  mutate(emm_grouped = factor(emm_grouped, levels = levels_order))
+
+# Plot a horizontal bar chart (with flipped y-axis order) of emm counts, facetted by Jurisdiction (rows) and Year (columns)
+histogram_emm <- ggplot(df_clean, aes(x = emm_grouped)) +
+  geom_bar(fill = "steelblue", color = "black") +
+  facet_grid(Jurisdiction ~ Year) +
+  coord_flip() +
+  # Reverse the order of the factor levels on the axis (after flip, this is the vertical axis)
+  scale_x_discrete(limits = rev(levels_order)) +
+  labs(title = "Distribution of Top 20 emm Types (Other at end) by Jurisdiction and Year",
+       x = "emm Type", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
