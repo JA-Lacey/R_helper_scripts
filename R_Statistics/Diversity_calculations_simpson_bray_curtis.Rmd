@@ -1,0 +1,90 @@
+---
+title: "Diversity_calcuations_simpson_bray_curtis"
+author: "Jake_Lacey"
+date: "2024-08-05"
+output: html_document
+---
+
+```{r, Diversity_calcuations_simpson_bray_curtis}
+
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(vegan)
+library(ggplot2)
+
+# Calculate Simpson's Reciprocal Index for the whole dataset
+total_sri <- 1 / diversity(filtered_data %>% count(ST) %>% pull(n), index = "simpson")
+
+# Print total SRI
+print(paste("Total Simpson's Reciprocal Index (SRI):", total_sri))
+
+# Calculate Simpson's Reciprocal Index for each Jurisdiction
+simpson_reciprocal <- filtered_data %>%
+  group_by(Jurisdiction) %>%
+  do(data.frame(simpson_index = 1 / diversity(as.numeric(table(.$ST)), index = "simpson"))) %>%
+  ungroup()
+
+print(simpson_reciprocal)
+
+# Prepare data for Bray-Curtis Dissimilarity Index
+bray_curtis_data <- filtered_data %>%
+  group_by(Jurisdiction, ST) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = ST, values_from = count, values_fill = list(count = 0))
+
+# Calculate Bray-Curtis Dissimilarity Index
+bray_curtis_matrix <- vegdist(bray_curtis_data[,-1], method = "bray")
+
+print(as.matrix(bray_curtis_matrix))
+
+# Perform Principal Component Analysis (PCA)
+pca <- prcomp(bray_curtis_data[,-1], scale. = TRUE)
+
+# Summary of PCA
+pca_summary <- summary(pca)
+print(pca_summary)
+
+# Plot eigenvalues (scree plot)
+eigenvalues <- pca$sdev^2
+eigenvalues_df <- data.frame(
+  PC = 1:length(eigenvalues),
+  Eigenvalue = eigenvalues
+)
+
+ggplot(eigenvalues_df, aes(x = PC, y = Eigenvalue)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Scree Plot", x = "Principal Component", y = "Eigenvalue") +
+  theme_minimal()
+
+# Calculate the number of samples in each Jurisdiction
+jurisdiction_counts <- filtered_data %>%
+  group_by(Jurisdiction) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Plot PCA results
+pca_data <- data.frame(pca$x)
+pca_data$Jurisdiction <- bray_curtis_data$Jurisdiction
+pca_data <- pca_data %>%
+  left_join(jurisdiction_counts, by = "Jurisdiction")
+
+# Define the custom color scheme for Jurisdiction
+jurisdiction_colors <- c("ACT" = "gray",    
+                         "NSW" = "deepskyblue1",     
+                         "NT" = "darkorange2",
+                         "QLD" = "darkorchid2",
+                         "SA" = "red2",
+                         "TAS" = "springgreen4",   
+                         "VIC" = "dodgerblue4",
+                         "WA" = "gold")
+
+ggplot(pca_data, aes(x = PC1, y = PC2, label = Jurisdiction, size = count, color = Jurisdiction)) +
+  geom_point() +
+  geom_text(vjust = -0.5) +
+  scale_color_manual(values = jurisdiction_colors) +
+  labs(title = "PCA of Jurisdictions Based on ST", x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal() +
+  guides(size = guide_legend(title = "Number of Samples"))
+
+
+```
