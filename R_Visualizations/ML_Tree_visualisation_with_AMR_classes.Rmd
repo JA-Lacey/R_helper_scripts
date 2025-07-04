@@ -1,0 +1,107 @@
+---
+title: "ML_Tree_with_heatmap_metadata"
+author: "Jake_Lacey"
+date: "2024-02-15"
+output: html_document
+---
+
+```{r, load packages}
+library(forcats)
+library(ggplot2)
+library(RColorBrewer)
+library(ggnewscale)
+library(patchwork)
+library(ggExtra)
+library(RColorBrewer)
+library(ape)
+library(ggtree)
+library(ggtreeExtra)
+library(lubridate)
+
+```
+
+sonnei_tree <- read.tree("/Path_to_directoryt/core.newick")
+sonnei_metadata <- read.csv("Path_to_directory/metadata.csv")
+
+# rerooting the tree to midpoint for nicer visual
+
+reroot_phylo_tree <- phytools::midpoint.root(sonnei_tree)
+
+# plot tree with location coloured as tips on tree, in rectangular layout, and bootstrapping visualised
+
+sonnei_tree_2 <- ggtree(reroot_phylo_tree, layout="rectangular") %<+% sonnei_metadata +
+  geom_tippoint(aes(colour = MDR.XDR, shape = "circle"), size=2) +
+  #geom_tiplab(size=2, align=TRUE, linesize=.1) +
+  geom_treescale() +
+  geom_text2(aes(subset=(as.numeric(label) > 80), label=label), size=2, hjust=1.75, vjust=-1.0, check_overlap = TRUE) + scale_colour_manual(values=c("MDR"="#a1d76a", "XDR"="#4575b4", "-"="#969696"))
+
+sonnei_tree_2
+
+
+###after this make a new-scale fill for geom-tile 
+
+sonnei_tree_3 <- sonnei_tree_2 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=MSM), width=0.000001,offset=0.2) +
+     scale_fill_manual(values=c("MSM"="#91bfdb", "-"="#f0f0f0"))
+
+sonnei_tree_4 <- sonnei_tree_3 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=Travel), width=0.000001,offset=0.05) +
+     scale_fill_manual(values=c("Travel-assocated"="#d73027","-"="#f0f0f0"))
+
+
+#add ESBL status as heatmap
+
+sonnei_tree_5 <- sonnei_tree_4 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_ESBL), width=0.000001,offset=0.1) +
+     scale_fill_manual(values=c("blaCTX-M-27"="#8856a7", "blaCTX-M-15"="#9ebcda", "blaCTX-M-3"="#bcbddc", "blaCTX-M-55"="#88419d","blaCTX-M-14"="#bfd3e6", "-"="#f0f0f0"))
+
+sonnei_tree_3
+
+#add Macrolide status as heatmap
+
+sonnei_tree_6 <- sonnei_tree_5 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_Macrolide), width=0.000001, offset=0.05) +
+     scale_fill_manual(values=c("erm(B)*;mph(A)"="#d95f0e", "mph(A)"="#fec44f", "-"="#f0f0f0"))
+
+sonnei_tree_6
+
+#add Sulfonimide status as heatmap
+
+sonnei_tree_7 <- sonnei_tree_6 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_Sulfonamide), width=0.000001,offset=0.05) +
+     scale_fill_manual(values=c("sul1;sul2"="#31a354", "sul2"="#a1d99b", "sul1"="#d9f0a3", "-"="#f0f0f0"))
+
+sonnei_tree_7
+
+#add Trimethroprim status as heatmap
+
+sonnei_tree_8 <- sonnei_tree_7 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_Trimethoprim), width=0.000001, offset=0.05) +
+     scale_fill_manual(values=c("dfrA1*;dfrA17"="#de2d26", "dfrA1"="#fc9272", "dfrA1*"="#fcae91","dfrA1;dfrA17"="#ef8a62", "-"="#f0f0f0"))
+
+sonnei_tree_8
+
+#add Quinolone status as heatmap
+
+sonnei_tree_9 <- sonnei_tree_8 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_Quinolone), width=0.000001,offset=0.05) +
+     scale_fill_manual(values=c("qnrS1"="#0570b0", "qnrB19"="#74a9cf", "qnrS13"="#bdc9e1", "-"="#f0f0f0"))
+
+sonnei_tree_9
+
+sonnei_tree_10 <- sonnei_tree_9 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_num.QRDR), width=0.000001,offset=0.05) +
+     scale_fill_manual(values=c("1"="#df65b0", "3"="#ce1256", "-"="#f0f0f0"))
+
+sonnei_tree_10
+
+sonnei_tree_11 <- sonnei_tree_10 + new_scale_fill() +
+         geom_fruit(geom=geom_tile, mapping=aes(fill=AMR_Streptomycin), width=0.000001,offset=0.05) +
+     scale_fill_manual(values=c("aadA1;aph(3'')-Ib;aph(6)-Id"="#084081", "aadA5;aph(3'')-Ib*;aph(6)-Id"="#2b8cbe", "aph(3'')-Ib*;aph(6)-Id"="#a8ddb5", "aadA1;aadA5;aph(3'')-Ib;aph(6)-Id"="#7bccc4", "-"="#f0f0f0"))
+
+sonnei_tree_11
+
+#save tree as file. 
+
+#ggsave(file="/Path_to_directory/sonnei_g_all_VIC_AMR_Risk_tips_MDRXDR_colour.pdf", plot=sonnei_tree_10, width=15, height=20)
+
