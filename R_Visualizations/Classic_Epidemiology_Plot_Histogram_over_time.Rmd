@@ -1,0 +1,60 @@
+```{r, Classic epidemiology plot by amr status}
+
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(RColorBrewer)
+
+# Read CSV file
+df <- read.csv("Path_to_directory/summary_statistics.csv", 
+               stringsAsFactors = FALSE)
+
+###csv file is contains Strain_ID, Collection_Date in YYYY-MM-DD, AMR_status (text), and Genotype
+
+# Parse dates and filter to post-2015
+df <- df %>%
+  mutate(
+    Date = case_when(
+      !is.na(Collection_Date) & nchar(Collection_Date) == 4 ~ as.Date(paste0(Collection_Date, "-01-01")),
+      !is.na(Collection_Date) ~ as.Date(Collection_Date, format = "%d/%m/%Y"),
+      TRUE ~ as.Date(paste0(Collection_Year, "-01-01"))
+    )
+  ) %>%
+  filter(Date >= as.Date("2015-01-01"))
+
+# Data cleaning: create a parsed date column and extract month
+df_clean <- df %>%
+  mutate(Date_coll = dmy(Collection_Date),
+         YearMonth = floor_date(Date_coll, "month"))
+
+# Recode the AMR status:
+# If the value in MDR/XDR/MDR_no_EsbL is "-", recode it as "None"; otherwise, keep its value.
+df_clean <- df_clean %>%
+  mutate(AMR_status = if_else(`MDR.XDR.MDR_no_EsbL` == "-", "None", `MDR.XDR.MDR_no_EsbL`))
+
+# Aggregate data by month and AMR status
+df_amr_plot <- df_clean %>%
+  group_by(YearMonth, AMR_status) %>%
+  summarise(Count = n(), .groups = "drop")
+
+# Define a color palette for the AMR statuses:
+# For example, we can assign red to "MDR", blue to "XDR", green to "MDR_no_EsbL", and grey to "None"
+amr_palette <- c("MDR" = "#1f78b4", "XDR" = "#e41a1c", "MDR_no_esbl" = "#33a02c", "None" = "grey")
+
+# Create a stacked bar plot of monthly counts colored by AMR status
+amr_bar_plot <- ggplot(df_amr_plot, aes(x = YearMonth, y = Count, fill = AMR_status)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  geom_vline(xintercept = as.numeric(as.Date("2020-01-01")), linetype = "dashed", color = "gray") +
+  geom_vline(xintercept = as.numeric(as.Date("2022-03-01")), linetype = "dashed", color = "gray") +
+  scale_fill_manual(values = amr_palette) +
+  labs(title = "Monthly Counts by AMR Status",
+       x = "Year",
+       y = "Count",
+       fill = "AMR Status") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+print(amr_bar_plot)
+
+#ggsave(file="/Path_to_directory/all_sonnei_epiplot_amr_status.pdf", plot=amr_bar_plot, width=14, height=7.5)

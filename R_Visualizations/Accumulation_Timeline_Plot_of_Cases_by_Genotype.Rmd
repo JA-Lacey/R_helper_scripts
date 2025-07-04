@@ -1,0 +1,75 @@
+```{r, genotype accumualtions}
+
+# Load required packages
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+
+# Read CSV file
+df <- read.csv("Path_to_directory/summary_statistics.csv", stringsAsFactors = FALSE)
+
+###csv file contains isolate_ID, Collection_Date (YYYY-MM-DD), Genotype, where each line is a single sample
+
+# Parse dates from your data
+df_geno <- sonnei_data %>%
+  mutate(Date = case_when(
+    !is.na(Collection_Date) & nchar(Collection_Date) == 4 ~ as.Date(paste0(Collection_Date, "-01-01")),
+    !is.na(Collection_Date) ~ as.Date(Collection_Date, format = "%d/%m/%Y"),
+    TRUE ~ as.Date(paste0(Collection_Year, "-01-01"))
+  ))
+
+# Create summary table: total cases per genotype
+geno_summary <- df_geno %>%
+  group_by(Sonnei_Genotype) %>%
+  summarise(total_cases = n(), .groups = "drop") %>%
+  arrange(desc(total_cases))
+
+# Identify the top 10 genotypes
+top10 <- geno_summary %>%
+  slice(1:10) %>%
+  pull(Sonnei_Genotype)
+
+
+# Aggregate data by month and calculate cumulative counts
+
+df_geno_cum <- df_geno %>%
+  mutate(month_year = floor_date(Date, "month")) %>%
+  group_by(Sonnei_Genotype, month_year) %>%
+  summarise(monthly_count = n(), .groups = "drop") %>%
+  arrange(Sonnei_Genotype, month_year) %>%
+  group_by(Sonnei_Genotype) %>%
+  mutate(cum_count = cumsum(monthly_count)) %>%
+  ungroup()
+
+# Recode genotypes: keep top 10; label all others as "Other"
+df_geno_cum <- df_geno_cum %>%
+  mutate(GenotypeGroup = if_else(Sonnei_Genotype %in% top10, Sonnei_Genotype, "Other"))
+
+last_points <- df_geno_cum %>%
+  group_by(GenotypeGroup) %>%
+  filter(month_year == max(month_year)) %>%
+  ungroup()
+
+
+# Plot the cumulative cases with colors for the top 10 genotypes
+
+plot_cum_top10 <- ggplot(df_geno_cum, aes(x = month_year, y = cum_count, color = GenotypeGroup)) +
+  geom_line() +
+  geom_point() +
+  geom_vline(xintercept = as.numeric(as.Date("2020-01-01")), linetype = "dashed", color = "gray") +
+  geom_vline(xintercept = as.numeric(as.Date("2022-01-01")), linetype = "dashed", color = "gray") +
+  labs(title = "Cumulative Cases Over Time by Genotype (Top 10 Colored)",
+       x = "Year", 
+       y = "Cumulative Cases",
+       color = "Genotype") +
+    scale_x_date(limits = c(as.Date("2015-01-01"), NA),date_breaks = "1 year", date_labels = "%Y") +
+  scale_y_continuous(limits = c(0, 320), expand = expansion(mult = c(0, .05))) +
+  scale_colour_manual(values = genotype_cols) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  geom_text(data = last_points, aes(label = GenotypeGroup), 
+            hjust = -0.1, size = 3, show.legend = FALSE)
+
+print(plot_cum_top10)
+
+#ggsave(file="/Path_to_directory/all_accumulation_plot.pdf", plot=plot_cum_top10, width=7, height=7)
