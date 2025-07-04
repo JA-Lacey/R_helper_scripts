@@ -1,0 +1,46 @@
+---
+title: "Alluvial_plots"
+author: "Jake_Lacey"
+date: "2024-08-05"
+output: html_document
+---
+
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(ggalluvial)
+library(RColorBrewer)
+
+# Filter to only include the top 10 emm types
+top_10_emm <- filtered_data %>%
+  count(emm) %>%
+  top_n(10, n) %>%
+  pull(emm)
+
+filtered_top_emm_data <- filtered_data %>%
+  filter(emm %in% top_10_emm)
+
+# Create alluvial plot data
+alluvial_data <- filtered_top_emm_data %>%
+  group_by(emm, Jurisdiction, Specimen_type_clean) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Define a color palette for the top 10 emm types
+emm_colors <- RColorBrewer::brewer.pal(10, "Set3")
+names(emm_colors) <- top_10_emm
+
+# Plot alluvial plot
+alluvial_plot <- ggplot(alluvial_data,
+       aes(axis1 = emm, axis2 = Jurisdiction, axis3 = Specimen_type_clean, y = count)) +
+  geom_alluvium(aes(fill = emm), width = 1/12) +
+  geom_stratum(width = 1/12, fill = "grey", color = "black") +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  scale_x_discrete(limits = c("emm", "Jurisdiction", "Specimen_type_clean"), expand = c(0.15, 0.05)) +
+  scale_fill_manual(values = emm_colors) +
+  theme_minimal() +
+  labs(title = "Alluvial Plot of Relationships between emm, Jurisdiction, and Specimen_type_clean",
+       x = "Attributes",
+       y = "Count")
+
+# Print the plot to the console
+print(alluvial_plot)
