@@ -1,3 +1,11 @@
+---
+title: "Diversity_calculations_Shannon_Richness"
+author: "Jake_Lacey"
+date: "2025-03-03"
+output: html_document
+---
+
+
 ```{r, quantfiying diversity within mutliple locations}
 
 library(tidyverse)

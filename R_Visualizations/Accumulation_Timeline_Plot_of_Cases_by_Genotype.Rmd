@@ -1,3 +1,11 @@
+---
+title: "Genotype_accumumulations_curves_over_time"
+author: "Jake_Lacey"
+date: "2024-02-15"
+output: html_document
+---
+
+
 ```{r, genotype accumualtions}
 
 # Load required packages
