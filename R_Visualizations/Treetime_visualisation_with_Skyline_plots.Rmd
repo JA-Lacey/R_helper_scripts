@@ -1,0 +1,107 @@
+# load libraries
+library(ggtree)
+library(treeio)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(ape)
+library(patchwork)
+
+# read in timetree files and additional metadata
+tree <- read.nexus(
+  "/path_to_directory/treetime_output/timetree.nexus"
+)
+metadata <- read.csv(
+  "/path_to_directory/meta.csv")
+
+##need to remove first row from file first and remove # from headers
+dates <- read_tsv(
+  "/path_to_directory/treetime_output/dates.tsv",
+  show_col_types = FALSE,
+  col_types = cols(
+    node           = col_character(),
+    date           = col_double(),
+    `numeric date` = col_double(),
+    `lower bound`  = col_double(),
+    `upper bound`  = col_double()
+  )
+) %>%
+  rename(
+    label   = node,
+    numdate = `numeric date`,
+    lower   = `lower bound`,
+    upper   = `upper bound`
+  ) %>%
+  filter(!is.na(numdate))
+
+year_breaks <- seq(2004, 2025, by = 1)
+
+tree_plot <- ggtree(
+  tree,
+  mrsd          = "2024-03-01",
+  branch.length = "numdate",
+  ladderize     = TRUE
+)
+
+tree_data <- tree_plot$data %>% left_join(dates, by = "label")
+
+p_tree <- tree_plot %<+% metadata +
+  geom_segment(
+    data = tree_data %>% filter(!is.na(lower)),
+    aes(x = lower, xend = upper, y = y, yend = y),
+    inherit.aes = FALSE,
+    color = "black", alpha = 0.3, size = 2
+  ) +
+  geom_tippoint(aes(color = Location), size = 2) +
+  geom_vline(xintercept = year_breaks,
+             linetype   = "dotted",
+             color      = "gray70",
+             size       = 0.3) +
+  scale_color_manual(
+    name = "Location",
+    values = c(
+      "Australia"      = "#4daf4a",
+      "New Zealand"    = "#377eb8",
+      "USA"            = "grey",
+      "Belgium"        = "#e41a1c",
+      "United Kingdom" = "#984ea3",
+      "Canada"         = "#ff7f00",
+      "Spain"          = "#b15928"
+    )
+  ) +
+  scale_x_continuous(name = "Year", breaks = year_breaks) +
+  theme_tree2() +
+  labs(
+    title    = "Time‐scaled Phylogenetic Tree of Shigella sonnei 3.6.1.1",
+    subtitle = "Horizontal bars show node‐date confidence intervals"
+  )
+
+# Read in Skyline data from treetime (note need to remove first row in file and remove #from the node column header)
+Ne_data <- read_tsv(
+  "/Users/laceyj1/Desktop/Shigella_VIC/Treetime_analysis/2025-07-07-005_final_treetime_3.6.1.1_Global/skyline.tsv",
+  show_col_types = FALSE,
+  col_types = cols(
+    date  = col_double(),
+    N_e   = col_double(),
+    lower = col_double(),
+    upper = col_double()
+  )
+) %>%
+  rename(numdate = date)
+
+# plot Skyline plot
+p_Ne <- ggplot(Ne_data, aes(x = numdate, y = N_e)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper),
+              fill  = "grey80",
+              alpha = 0.3) +
+  geom_line(size = 0.8) +
+  scale_x_continuous(name = "Year", breaks = year_breaks) +
+  ylab(expression("Effective population size ("~N[e]~")")) +
+  theme_minimal(base_size = 12) +
+  theme(
+    # remove all grid lines
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    # no legend
+    legend.position = "none"
+  )
