@@ -1,0 +1,65 @@
+###this is some R code to compare a dataset,of 34 columns
+#Location, Year, Counts of dataset, counts of Notification
+#this will plot the total counts of notificaiton as line graph per year and then fill in the proportion of dataset (eg proportion) 
+
+```{r, notificaiotns vs dataset}
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(tidyr) 
+
+# Read the CSV file
+data <- read.csv("Path_to_Directory/Notification_Numbers_by_Year.csv") 
+
+# Transform data to wide format and calculate capture rate
+data_wide <- data %>%
+  pivot_wider(names_from = Study, values_from = Count) %>%
+  mutate(
+    CaptureRate = ifelse(Notificaiton > 0, round(APG / Notificaiton, 2), NA)
+  )
+
+# Reshape for plotting
+data_combined <- data_wide %>%
+  pivot_longer(cols = c(APG, Notificaiton), names_to = "Metric", values_to = "Value")
+
+# Create the timeline plot with capture rate as text labels
+Data_v_Notificaitons_capture <- ggplot() +
+  # Fill the area from the bottom to the APG line
+  geom_area(data = data_wide, aes(x = Year, y = APG, fill = State), alpha = 0.3) +
+  # Add capture rate labels
+  geom_text(
+    data = data_wide,
+    aes(
+      x = Year,
+      y = (Data + Notificaiton) / 2,  # Positioning the label between Dataset and Notificaiton
+      label = paste0(round(CaptureRate * 100, 1), "%"),
+      group = State
+    ),
+    size = 3,
+    color = "black",
+    position = position_dodge(width = 0.5)
+  ) +
+  # Plot the Sequenced Dataset and Notificaiotn lines and points
+  geom_line(data = data_combined, aes(x = Year, y = Value, color = State, linetype = Metric), size = 1) +
+  geom_point(data = data_combined, aes(x = Year, y = Value, color = State), size = 2) +
+  labs(
+    title = "dataset vs Notificaiton with Capture Rate Over Time by Jurisdiction",
+    x = "Year",
+    y = "Reported Cases",
+    color = "State",
+    fill = "State",
+    linetype = "Metric"
+  ) +
+  facet_wrap(~ State, scales = "free_y", ncol = 1) +
+  # Show ticks only for 2022, 2023, and 2024 on the x-axis
+  scale_x_continuous(breaks = c(2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024)) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Display the plot
+print(APG_v_Notificaitons_capture)
+
+ggsave(file="/Path_to_Directory/Dataset_v_Notificaiton_capture.pdf", plot=APG_v_Notificaitons_capture, width=12, height=9)
+
+```

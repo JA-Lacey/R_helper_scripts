@@ -1,0 +1,215 @@
+#this R code looks at 
+
+```{r, VIC and QLD, testing joinpoint breaks}
+# Load required packages
+library(tidyverse)
+library(lubridate)
+library(segmented)
+
+# Subset QLD data (assuming df_emm_total has already been created)
+df_qld <- df_emm_total %>% filter(Jurisdiction == "QLD")
+
+# Fit the base model without any breakpoints for QLD
+model_qld_base <- glm(TotalCount ~ month_num, family = poisson, data = df_qld)
+
+# Create a dataframe to store AIC results for QLD
+aic_qld <- data.frame(npsi = 0, AIC = AIC(model_qld_base))
+
+# Fit segmented models with 1 to 10 breakpoints and record their AIC for QLD
+for(n in 1:10) {
+  model_qld_seg <- segmented(model_qld_base, seg.Z = ~month_num, npsi = n)
+  aic_qld <- rbind(aic_qld, data.frame(npsi = n, AIC = AIC(model_qld_seg)))
+}
+
+print("AIC results for QLD:")
+print(aic_qld)
+
+# Subset VIC data
+df_vic <- df_emm_total %>% filter(Jurisdiction == "VIC")
+
+# Fit the base model for VIC
+model_vic_base <- glm(TotalCount ~ month_num, family = poisson, data = df_vic)
+
+# Create a dataframe to store AIC results for VIC
+aic_vic <- data.frame(npsi = 0, AIC = AIC(model_vic_base))
+
+# Fit segmented models with 1 to 10 breakpoints for VIC and record AIC values
+for(n in 1:10) {
+  model_vic_seg <- segmented(model_vic_base, seg.Z = ~month_num, npsi = n)
+  aic_vic <- rbind(aic_vic, data.frame(npsi = n, AIC = AIC(model_vic_seg)))
+}
+
+print("AIC results for VIC:")
+print(aic_vic)
+
+# Subset NT data
+df_nt <- df_emm_total %>% filter(Jurisdiction == "NT")
+
+# Check if there are any observations for NT
+if(nrow(df_nt) == 0) {
+  cat("No NT data available\n")
+} else {
+  # Fit the base model for NT
+  model_nt_base <- glm(TotalCount ~ month_num, family = poisson, data = df_nt)
+  
+  # Create a dataframe to store AIC results for NT (use NT base model)
+  aic_nt <- data.frame(npsi = 0, AIC = AIC(model_nt_base))
+  
+  # Fit segmented models with 1 to 10 breakpoints for NT and record AIC values
+  for(n in 1:10) {
+    model_nt_seg <- segmented(model_nt_base, seg.Z = ~month_num, npsi = n)
+    aic_nt <- rbind(aic_nt, data.frame(npsi = n, AIC = AIC(model_nt_seg)))
+  }
+  
+  print("AIC results for NT:")
+  print(aic_nt)
+}
+```
+
+
+```{r, VIC and QLD joinpoint analysis}
+# Load required packages
+library(tidyverse)
+library(lubridate)
+library(segmented)
+
+#---------------------------
+# Data Aggregation
+#---------------------------
+df_emm_total <- df_clean %>%
+  group_by(Jurisdiction, YearMonth) %>%
+  summarise(TotalCount = n(), .groups = "drop") %>%
+  mutate(month_num = as.numeric(difftime(YearMonth, min(YearMonth), units = "days")) / 30.44)
+
+#---------------------------
+# QLD: Fit Model with 3 Breakpoints
+#---------------------------
+df_qld <- df_emm_total %>% filter(Jurisdiction == "QLD")
+
+# Fit the base Poisson regression model
+model_qld <- glm(TotalCount ~ month_num, family = poisson, data = df_qld)
+
+# Apply segmented regression with 3 breakpoints
+seg_qld <- segmented(model_qld, seg.Z = ~month_num, npsi = 3)
+print(seg_qld$psi)  # inspect estimated breakpoints
+
+# Extract the 3 breakpoints
+bp_qld1 <- seg_qld$psi[1, "Est."]
+bp_qld2 <- seg_qld$psi[2, "Est."]
+bp_qld3 <- seg_qld$psi[3, "Est."]
+
+# Add fitted values to the QLD dataset
+df_qld <- df_qld %>% mutate(fitted = fitted(seg_qld))
+
+# Determine the starting year for QLD
+start_year <- as.numeric(format(min(df_qld$YearMonth), "%Y"))
+
+#---------------------------
+# VIC: Fit Model with 6 Breakpoints
+#---------------------------
+df_vic <- df_emm_total %>% filter(Jurisdiction == "VIC")
+
+# Fit the base Poisson regression model for VIC
+model_vic <- glm(TotalCount ~ month_num, family = poisson, data = df_vic)
+
+# Apply segmented regression with 6 breakpoints
+seg_vic <- segmented(model_vic, seg.Z = ~month_num, npsi = 6)
+print(seg_vic$psi)  # inspect estimated breakpoints
+
+# Extract the 6 breakpoints
+bp_vic1 <- seg_vic$psi[1, "Est."]
+bp_vic2 <- seg_vic$psi[2, "Est."]
+bp_vic3 <- seg_vic$psi[3, "Est."]
+bp_vic4 <- seg_vic$psi[4, "Est."]
+bp_vic5 <- seg_vic$psi[5, "Est."]
+bp_vic6 <- seg_vic$psi[6, "Est."]
+
+# Add fitted values to the VIC dataset
+df_vic <- df_vic %>% mutate(fitted = fitted(seg_vic))
+
+# Determine the starting year for VIC
+start_year_vic <- as.numeric(format(min(df_vic$YearMonth), "%Y"))
+
+#---------------------------
+# Plotting with ggplot2
+#---------------------------
+
+# QLD Plot with ggplot (3 breakpoints)
+plot_qld <- ggplot(df_qld, aes(x = month_num, y = TotalCount)) +
+  geom_point(color = "blue") +
+  geom_line(aes(y = fitted), color = "red", size = 1) +
+  geom_vline(xintercept = bp_qld1, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_qld2, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_qld3, color = "grey", linetype = "dashed", size = 1) +
+  scale_x_continuous(name = "Year",
+                     breaks = seq(0, max(df_qld$month_num), by = 12),
+                     labels = start_year + seq(0, max(df_qld$month_num), by = 12) / 12) +
+  labs(title = "QLD Joinpoint Regression (3 Breakpoints)",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# VIC Plot with ggplot (6 breakpoints)
+plot_vic <- ggplot(df_vic, aes(x = month_num, y = TotalCount)) +
+  geom_point(color = "blue") +
+  geom_line(aes(y = fitted), color = "red", size = 1) +
+  geom_vline(xintercept = bp_vic1, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_vic2, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_vic3, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_vic4, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_vic5, color = "grey", linetype = "dashed", size = 1) +
+  geom_vline(xintercept = bp_vic6, color = "grey", linetype = "dashed", size = 1) +
+  scale_x_continuous(name = "Year",
+                     breaks = seq(0, max(df_vic$month_num), by = 12),
+                     labels = start_year_vic + seq(0, max(df_vic$month_num), by = 12) / 12) +
+  labs(title = "VIC Joinpoint Regression (6 Breakpoints)",
+       y = "Total Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Combine QLD (top) and VIC (bottom) using ggextra
+library(gridExtra)
+combined_plot <- grid.arrange(plot_qld, plot_vic, ncol = 1)
+
+#ggsave(file="/Users/laceyj1/Documents/APG_iGAS/202502_emm1_report/QLD_VIC_joinpoint.pdf", plot=combined_plot, width=7, height=7)
+
+
+#---------------------------
+# Print Breakpoints as Dates for QLD
+#---------------------------
+# Get the starting date from QLD data
+start_date_qld <- min(df_qld$YearMonth)
+# Create a vector with the QLD breakpoints (in months)
+qld_breakpoints <- c(bp_qld1, bp_qld2, bp_qld3)
+# Convert each breakpoint (rounded to an integer number of months) to a date
+qld_break_dates <- start_date_qld %m+% months(round(qld_breakpoints))
+
+# Create a data frame with the results
+df_qld_bp <- data.frame(
+  Breakpoint = paste("Breakpoint", 1:length(qld_breakpoints)),
+  Month_Num = qld_breakpoints,
+  Date = qld_break_dates
+)
+print("QLD Breakpoints:")
+print(df_qld_bp)
+
+#---------------------------
+# Print Breakpoints as Dates for VIC
+#---------------------------
+# Get the starting date from VIC data
+start_date_vic <- min(df_vic$YearMonth)
+# Create a vector with the VIC breakpoints (in months)
+vic_breakpoints <- c(bp_vic1, bp_vic2, bp_vic3, bp_vic4, bp_vic5, bp_vic6)
+# Convert each breakpoint (rounded to an integer number of months) to a date
+vic_break_dates <- start_date_vic %m+% months(round(vic_breakpoints))
+
+# Create a data frame with the results
+df_vic_bp <- data.frame(
+  Breakpoint = paste("Breakpoint", 1:length(vic_breakpoints)),
+  Month_Num = vic_breakpoints,
+  Date = vic_break_dates
+)
+print("VIC Breakpoints:")
+print(df_vic_bp)
+
+```
